@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { KPICard } from "./KPICard";
 import { TrendChart } from "./TrendChart";
 import { RankingTable } from "./RankingTable";
@@ -27,7 +28,7 @@ const mockData = {
     { position: 3, name: "Roberto Lima", value: "R$ 6.534", growth: 13.4 },
     { position: 4, name: "Carla Ferreira", value: "R$ 5.987", growth: 10.2 },
   ],
-  metas: [
+  initialMetas: [
     { periodo: "Janeiro", meta: 45000, realizado: 42567, percentual: 94.6 },
     { periodo: "Fevereiro", meta: 48000, realizado: 51230, percentual: 106.7 },
     { periodo: "Hoje", meta: 2500, realizado: 1873, percentual: 74.9 },
@@ -35,9 +36,17 @@ const mockData = {
 };
 
 export function ConvenienciaTab() {
+  const [metas, setMetas] = useState(mockData.initialMetas);
+
   const handleExportCSV = () => {
     // Implementar exportação CSV
     console.log("Exportando dados da conveniência para CSV...");
+  };
+
+  const handleMetasChange = (newMetas: typeof metas) => {
+    setMetas(newMetas);
+    // Aqui poderia sincronizar com o backend
+    console.log("Metas atualizadas:", newMetas);
   };
 
   return (
@@ -117,7 +126,8 @@ export function ConvenienciaTab() {
         />
         <MetasTable
           title="Metas vs Realizado"
-          data={mockData.metas}
+          data={metas}
+          onDataChange={handleMetasChange}
         />
       </div>
     </div>
