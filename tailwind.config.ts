@@ -19,6 +19,37 @@ export default {
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        
+        // Dashboard specific colors
+        "dashboard-bg": "hsl(var(--dashboard-bg))",
+        "dashboard-surface": "hsl(var(--dashboard-surface))",
+        "dashboard-border": "hsl(var(--dashboard-border))",
+        
+        // Text colors
+        "text-primary": "hsl(var(--text-primary))",
+        "text-secondary": "hsl(var(--text-secondary))",
+        "text-muted": "hsl(var(--text-muted))",
+        
+        // Vibrant colors
+        cyan: "hsl(var(--cyan))",
+        "cyan-dark": "hsl(var(--cyan-dark))",
+        purple: "hsl(var(--purple))",
+        "purple-dark": "hsl(var(--purple-dark))",
+        pink: "hsl(var(--pink))",
+        "pink-dark": "hsl(var(--pink-dark))",
+        orange: "hsl(var(--orange))",
+        "orange-dark": "hsl(var(--orange-dark))",
+        green: "hsl(var(--green))",
+        "green-dark": "hsl(var(--green-dark))",
+        
+        // KPI specific colors
+        "kpi-cyan": "hsl(var(--kpi-cyan))",
+        "kpi-purple": "hsl(var(--kpi-purple))",
+        "kpi-pink": "hsl(var(--kpi-pink))",
+        "kpi-orange": "hsl(var(--kpi-orange))",
+        "kpi-green": "hsl(var(--kpi-green))",
+        "kpi-blue": "hsl(var(--kpi-blue))",
+        
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -46,6 +77,7 @@ export default {
         card: {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
+          surface: "hsl(var(--card-surface))",
         },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
@@ -57,6 +89,17 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+      },
+      backgroundImage: {
+        "gradient-primary": "var(--gradient-primary)",
+        "gradient-secondary": "var(--gradient-secondary)",
+        "gradient-success": "var(--gradient-success)",
+        "gradient-chart": "var(--gradient-chart)",
+      },
+      boxShadow: {
+        glow: "var(--shadow-glow)",
+        card: "var(--shadow-card)",
+        elevated: "var(--shadow-elevated)",
       },
       borderRadius: {
         lg: "var(--radius)",
