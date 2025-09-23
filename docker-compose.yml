@@ -10,4 +10,4 @@ services:
     container_name: cifal-frontend
     restart: unless-stopped
     ports:
-      - "8087:95" 
+      - "8087:8087" 
