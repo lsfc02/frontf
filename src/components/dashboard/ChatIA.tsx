@@ -40,12 +40,8 @@ export function ChatIA({ onCommand }: ChatIAProps) {
     setMessages(prev => [...prev, userMessage]);
     setInputText("");
     setIsLoading(true);
-
-    // Simulate AI processing
     setTimeout(() => {
       let aiResponse = "";
-      
-      // Simple command processing simulation
       const lowerInput = inputText.toLowerCase();
       
       if (lowerInput.includes("hoje") || lowerInput.includes("dados de hoje")) {
@@ -88,7 +84,6 @@ export function ChatIA({ onCommand }: ChatIAProps) {
 
   return (
     <div className="flex flex-col h-full bg-card rounded-xl border border-border">
-      {/* Header */}
       <div className="flex items-center gap-3 p-4 border-b border-border">
         <div className="w-10 h-10 rounded-full bg-gradient-primary flex items-center justify-center">
           <Bot className="w-5 h-5 text-white" />
@@ -98,8 +93,6 @@ export function ChatIA({ onCommand }: ChatIAProps) {
           <p className="text-sm text-text-muted">Comandos inteligentes para o dashboard</p>
         </div>
       </div>
-
-      {/* Messages */}
       <ScrollArea className="flex-1 p-4">
         <div className="space-y-4">
           {messages.map((message) => (
@@ -153,8 +146,6 @@ export function ChatIA({ onCommand }: ChatIAProps) {
           )}
         </div>
       </ScrollArea>
-
-      {/* Input */}
       <div className="p-4 border-t border-border">
         <div className="flex gap-2">
           <Input
@@ -174,8 +165,6 @@ export function ChatIA({ onCommand }: ChatIAProps) {
             <Send className="w-4 h-4" />
           </Button>
         </div>
-        
-        {/* Quick commands */}
         <div className="flex flex-wrap gap-2 mt-3">
           {["Dados de hoje", "Ranking colaboradores", "Comparar metas", "Relatório semanal"].map((cmd) => (
             <button

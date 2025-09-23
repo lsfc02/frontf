@@ -1,4 +1,5 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip } from 'recharts';
+import { formatNumber } from '@/lib/utils'; 
 
 interface TrendChartProps {
   data: Array<{ name: string; [key: string]: any }>;
@@ -48,6 +49,17 @@ export function TrendChart({ data, lines, title, height = 300 }: TrendChartProps
                 color: 'hsl(var(--text-primary))',
               }}
               labelStyle={{ color: 'hsl(var(--text-secondary))' }}
+              formatter={(value: number, name: string) => {
+                if (name === 'Litros') {
+                  const formattedValue = formatNumber(value, { maximumFractionDigits: 2 });
+                  return [formattedValue, name];
+                }
+                if (name.includes('Valor')) {
+                  const formattedValue = formatNumber(value, { style: 'currency' });
+                  return [formattedValue, name];
+                }
+                return [value, name];
+              }}
             />
             {lines.map((line) => (
               <Line

@@ -1,10 +1,12 @@
 import { Trophy, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+
 interface RankingItem {
   position: number;
   name: string;
-  value: string;
+  value: string; // para faturamento
+  subValue?: string; // para litragem
   growth: number;
 }
 
@@ -13,12 +15,6 @@ interface RankingTableProps {
   subtitle?: string;
   data: RankingItem[];
 }
-
-const positionColors = {
-  1: "text-yellow-500",
-  2: "text-gray-400", 
-  3: "text-amber-600",
-};
 
 export function RankingTable({ title, subtitle, data }: RankingTableProps) {
   return (
@@ -55,18 +51,22 @@ export function RankingTable({ title, subtitle, data }: RankingTableProps) {
               <div>
                 <p className="font-medium text-text-primary">{item.name}</p>
                 <p className="text-sm text-text-secondary">{item.value}</p>
+                {item.subValue && (
+                    <p className="text-xs text-text-muted mt-1">{item.subValue}</p>
+                )}
               </div>
             </div>
 
             <div className="flex items-center gap-2">
               <div className={cn(
                 "flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium",
-                item.growth > 0 
-                  ? "bg-green/20 text-green"
-                  : "bg-destructive/20 text-destructive"
+                item.growth >= 0 
+                  ? "bg-green-500/20 text-green-400"
+                  : "bg-red-500/20 text-red-400"
               )}>
                 <TrendingUp className="w-3 h-3" />
-                <span>+{item.growth}%</span>
+              
+                 <span>{item.growth >= 0 ? '+' : ''}{item.growth}%</span>
               </div>
             </div>
           </div>
@@ -75,3 +75,4 @@ export function RankingTable({ title, subtitle, data }: RankingTableProps) {
     </div>
   );
 }
+
