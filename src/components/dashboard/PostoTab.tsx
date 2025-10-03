@@ -7,14 +7,15 @@ import { MetaEditForm } from "./MetaEditForm";
 import { PerformanceResumo, PerformanceData } from "./PerfomanceResumo";
 import { Fuel, Car, DollarSign, Users, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { formatNumber } from "@/lib/utils";
 import { CSVLink } from "react-csv";
 
+
 interface Abastecimento { 
   produto: string; 
-  valor: number; 
+  valor: number;
+  situacao: string; 
   nomeFuncionario: string; 
   dhRegistro: string; 
   litragem: number; 
@@ -24,7 +25,6 @@ interface ApiResponse { abastecimentos: Abastecimento[]; }
 
 interface Meta { periodo: string; meta: number; realizado: number; percentual: number; }
 
-// Props de data que o componente agora recebe
 interface DateProps {
   startDate: string;
   endDate: string;
@@ -45,29 +45,29 @@ async function fetchAbastecimentos(startDate: string, endDate: string): Promise<
 }
 
 const mapearProdutoParaCategoria = (nomeProduto: string): string => {
-  if (!nomeProduto) return "OUTROS";
-  const nomeUpper = nomeProduto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
-  if (nomeUpper.includes("DIESEL")) return "DIESEL S-10";
-  if (nomeUpper.includes("ETANOL")) return "ETANOL COMUM";
-  if (nomeUpper.includes("GASOLINA")) return "GASOLINA COMUM";
-  if (["ADITIVO", "FLUIDO", "ARLA", "MASTER", "IPIRANGA MOTO", "HAVOLINE", "ATF"]
-      .some(k => nomeUpper.includes(k))) {
-    return "LUBRIFICANTES E ADITIVOS";
-  }
-  if (nomeUpper.includes("PALHETA")) {
-    return "DIVERSOS";
-  }
+    if (!nomeProduto) return "OUTROS";
+    const nomeUpper = nomeProduto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
 
-  return "OUTROS";
+    if (nomeUpper.includes("DIESEL")) return "DIESEL S-10";
+    if (nomeUpper.includes("ETANOL")) return "ETANOL COMUM";
+
+    if (nomeUpper.includes("GASOLINA DT CLEAN")) return "GASOLINA DT CLEAN";
+    if (nomeUpper.includes("GASOLINA")) return "GASOLINA COMUM";
+
+    if (["ADITIVO", "FLUIDO", "ARLA", "MASTER", "IPIRANGA MOTO", "HAVOLINE", "ATF"]
+        .some(k => nomeUpper.includes(k))) {
+        return "LUBRIFICANTES E ADITIVOS";
+    }
+    if (nomeUpper.includes("PALHETA")) {
+        return "DIVERSOS";
+    }
+
+    return "OUTROS";
 };
 
 export function PostoTab({ startDate, endDate }: DateProps) {
   const { toast } = useToast();
   const today = new Date();
-  
-  // REMOVIDO o estado local de data daqui.
-  // const [startDate, setStartDate] = useState(...);
-  // const [endDate, setEndDate] = useState(...);
   
   const [metasPosto, setMetasPosto] = useState<Meta[]>(() => {
     const saved = localStorage.getItem('postoMetas');
@@ -75,6 +75,7 @@ export function PostoTab({ startDate, endDate }: DateProps) {
       { periodo: "DIESEL S-10", meta: 9078, realizado: 0, percentual: 0 },
       { periodo: "ETANOL COMUM", meta: 78650, realizado: 0, percentual: 0 },
       { periodo: "GASOLINA COMUM", meta: 46980, realizado: 0, percentual: 0 },
+      { periodo: "GASOLINA DT CLEAN", meta: 60000, realizado: 0, percentual: 0 },
       { periodo: "LUBRIFICANTES E ADITIVOS", meta: 3828, realizado: 0, percentual: 0 },
       { periodo: "DIVERSOS", meta: 130, realizado: 0, percentual: 0 },
     ];
@@ -88,13 +89,43 @@ export function PostoTab({ startDate, endDate }: DateProps) {
   }, [metasPosto]);
 
   const { data: apiData, isLoading, isError, error } = useQuery({
-    queryKey: ['abastecimentos', startDate, endDate], // Usa as props
+    queryKey: ['abastecimentos', startDate, endDate],
     queryFn: () => fetchAbastecimentos(startDate, endDate),
     refetchInterval: 60000,
   });
 
   const processedData = useMemo(() => {
     const abastecimentos = apiData?.abastecimentos;
+    
+    if (import.meta.env.DEV && abastecimentos) {
+      console.groupCollapsed("[DEBUG] Análise de Vendas de Etanol");
+
+
+      const vendasDeEtanol = abastecimentos.filter(ab => 
+        ab.produto && ab.produto.toUpperCase().includes("ETANOL")
+      );
+      console.log(`Encontradas ${vendasDeEtanol.length} vendas que contêm "ETANOL":`, vendasDeEtanol);
+
+      const etanolCancelado = vendasDeEtanol.filter(ab => 
+        ab.situacao === 'CANCELADO' || ab.situacao === 'C'
+      );
+      
+      if (etanolCancelado.length > 0) {
+        console.warn(`‼️ Encontradas ${etanolCancelado.length} VENDA(S) DE ETANOL CANCELADA(S):`, etanolCancelado);
+        
+        const vendaSuspeita = etanolCancelado.find(ab => Math.abs(ab.valor - 43.81) < 0.01);
+        if (vendaSuspeita) {
+          console.error("🔥🔥🔥 ALVO ENCONTRADO! A venda de R$ 43,81 (ou valor próximo) está com status cancelado:", vendaSuspeita);
+        }
+
+      } else {
+        console.log("✅ Nenhuma venda de Etanol com status 'CANCELADO' ou 'C' foi encontrada.");
+      }
+
+      console.groupEnd();
+    }
+    // FIM DO BLOCO DE LOG
+
     if (!abastecimentos) return { kpis: null, rankingData: [], performanceResumoData: [], chartData: [] };
 
     const faturamentoTotal = abastecimentos.reduce((acc, item) => acc + item.valor, 0);
@@ -108,6 +139,7 @@ export function PostoTab({ startDate, endDate }: DateProps) {
       return acc;
     }, {} as Record<string, number>);
 
+    // ... (resto do seu código 'useMemo' continua exatamente igual)
     const end = new Date(endDate);
     const diasCorridos = end.getDate();
     const diasNoMes = new Date(end.getFullYear(), end.getMonth() + 1, 0).getDate();
@@ -170,14 +202,14 @@ export function PostoTab({ startDate, endDate }: DateProps) {
       chartData: hourlyData.filter(h => h.litros > 0 || h.valor > 0),
     };
   }, [apiData, startDate, endDate, metasPosto, today]);
-
+  
   const csvData = useMemo(() => {
       if (!apiData || !apiData.abastecimentos) return [];
-      const headers = ["Data", "Hora", "Produto", "Litragem", "Valor", "Funcionário"];
+      const headers = ["Data", "Hora", "Produto", "Litragem", "Valor", "Funcionário", "Status"];
       const dataRows = apiData.abastecimentos.map(ab => [
         new Date(ab.dhRegistro).toLocaleDateString('pt-BR'),
         new Date(ab.dhRegistro).toLocaleTimeString('pt-BR'),
-        ab.produto, ab.litragem, ab.valor, ab.nomeFuncionario
+        ab.produto, ab.litragem, ab.valor, ab.nomeFuncionario, ab.situacao
       ]);
       return [headers, ...dataRows];
   }, [apiData]);
@@ -207,7 +239,6 @@ export function PostoTab({ startDate, endDate }: DateProps) {
           <h1 className="text-3xl font-bold gradient-text">Posto de Combustíveis</h1>
           <p className="text-text-secondary mt-1">Acompanhe as métricas e performance do posto</p>
         </div>
-        {/* REMOVIDO os filtros de data daqui, mantendo apenas a exportação */}
         <div className="flex items-center gap-4 w-full md:w-auto">
           <CSVLink data={csvData} filename={`relatorio_posto_${startDate}_a_${endDate}.csv`}>
             <Button variant="outline" className="gap-2 w-full md:w-auto"><Download className="w-4 h-4" />Exportar CSV</Button>
