@@ -10,58 +10,62 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { formatNumber } from "@/lib/utils";
 import { CSVLink } from "react-csv";
-
+import { devLog } from "@/lib/logger";
 
 interface Abastecimento { 
   produto: string; 
-  valor: number;
-  situacao: string; 
-  nomeFuncionario: string; 
+  valor: number | string;
+  situacao: string;
+  nomeFuncionario: string | null;
   dhRegistro: string; 
-  litragem: number; 
+  litragem: number | string; 
 }
-
 interface ApiResponse { abastecimentos: Abastecimento[]; }
-
 interface Meta { periodo: string; meta: number; realizado: number; percentual: number; }
+interface DateProps { startDate: string; endDate: string; }
 
-interface DateProps {
-  startDate: string;
-  endDate: string;
-}
-
-async function fetchAbastecimentos(startDate: string, endDate: string): Promise<ApiResponse> {
+async function fetchBaseAbastecimentos(startDate: string, endDate: string): Promise<ApiResponse> {
   const token = localStorage.getItem("token");
-  if (!token) throw new Error("Token de autenticação não encontrado.");
-  
-  const params = new URLSearchParams({ ini: startDate, fim: endDate, top: '10000' });
-
-  const apiUrl = import.meta.env.VITE_API_BASE_URL;
-  const url = `${apiUrl}/fueltec/abastecimentos?${params.toString()}`;
-
+  if (!token) throw new Error("Token não encontrado.");
+  const params = new URLSearchParams({ ini: startDate, fim: endDate, top: '20000' });
+  const url = `${import.meta.env.VITE_API_BASE_URL}/fueltec/abastecimentos?${params.toString()}`;
   const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
-  if (!response.ok) throw new Error('Falha ao buscar abastecimentos.');
+  if (!response.ok) return { abastecimentos: [] };
   return response.json();
 }
+
+async function fetchEtanolCorrigido(startDate: string, endDate: string): Promise<ApiResponse> {
+  const token = localStorage.getItem("token");
+  if (!token) throw new Error("Token não encontrado.");
+  const params = new URLSearchParams({ data_inicio: startDate, data_fim: endDate });
+  const url = `${import.meta.env.VITE_API_BASE_URL}/etanol/vendas?${params.toString()}`;
+  const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+  if (!response.ok) throw new Error('Falha ao buscar vendas de Etanol.');
+  return response.json();
+}
+
+async function fetchLojaVendas(startDate: string, endDate: string): Promise<ApiResponse> {
+  const token = localStorage.getItem("token");
+  if (!token) throw new Error("Token não encontrado.");
+  const params = new URLSearchParams({ data_inicio: startDate, data_fim: endDate });
+  const url = `${import.meta.env.VITE_API_BASE_URL}/loja/vendas?${params.toString()}`;
+  const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+  if (!response.ok) throw new Error('Falha ao buscar vendas da loja.');
+  return response.json();
+}
+
+const palavrasChaveLoja = ["ADITIVO", "ARLA", "MASTER", "FLUIDO", "HAVOLINE", "IPIRANGA", "PALHETA", "LUBRIFICANTE"];
 
 const mapearProdutoParaCategoria = (nomeProduto: string): string => {
     if (!nomeProduto) return "OUTROS";
     const nomeUpper = nomeProduto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
-
     if (nomeUpper.includes("DIESEL")) return "DIESEL S-10";
     if (nomeUpper.includes("ETANOL")) return "ETANOL COMUM";
-
     if (nomeUpper.includes("GASOLINA DT CLEAN")) return "GASOLINA DT CLEAN";
     if (nomeUpper.includes("GASOLINA")) return "GASOLINA COMUM";
-
-    if (["ADITIVO", "FLUIDO", "ARLA", "MASTER", "IPIRANGA MOTO", "HAVOLINE", "ATF"]
-        .some(k => nomeUpper.includes(k))) {
+    if (palavrasChaveLoja.some(palavra => nomeUpper.includes(palavra))) {
         return "LUBRIFICANTES E ADITIVOS";
     }
-    if (nomeUpper.includes("PALHETA")) {
-        return "DIVERSOS";
-    }
-
     return "OUTROS";
 };
 
@@ -88,132 +92,146 @@ export function PostoTab({ startDate, endDate }: DateProps) {
     localStorage.setItem('postoMetas', JSON.stringify(metasPosto));
   }, [metasPosto]);
 
-  const { data: apiData, isLoading, isError, error } = useQuery({
-    queryKey: ['abastecimentos', startDate, endDate],
-    queryFn: () => fetchAbastecimentos(startDate, endDate),
+  const { data: baseData, isLoading: isLoadingBase, isError: isErrorBase, error: errorBase } = useQuery({
+    queryKey: ['baseAbastecimentos', startDate, endDate],
+    queryFn: () => fetchBaseAbastecimentos(startDate, endDate),
+    refetchInterval: 60000,
+  });
+  
+  const { data: etanolData, isLoading: isLoadingEtanol, isError: isErrorEtanol, error: errorEtanol } = useQuery({
+    queryKey: ['etanolCorrigido', startDate, endDate],
+    queryFn: () => fetchEtanolCorrigido(startDate, endDate),
     refetchInterval: 60000,
   });
 
+  const { data: lojaData, isLoading: isLoadingLoja, isError: isErrorLoja, error: errorLoja } = useQuery({
+    queryKey: ['lojaVendas', startDate, endDate],
+    queryFn: () => fetchLojaVendas(startDate, endDate),
+    refetchInterval: 60000,
+  });
+
+  const isLoading = isLoadingBase || isLoadingEtanol || isLoadingLoja;
+  const isError = isErrorBase || isErrorEtanol || isErrorLoja;
+  const error = errorBase || errorEtanol || errorLoja;
+
   const processedData = useMemo(() => {
-    const abastecimentos = apiData?.abastecimentos;
-    
-    if (import.meta.env.DEV && abastecimentos) {
-      console.groupCollapsed("[DEBUG] Análise de Vendas de Etanol");
+    const baseAbastecimentos = baseData?.abastecimentos || [];
+    const etanolCorrigido = etanolData?.abastecimentos || [];
+    const lojaCorrigida = lojaData?.abastecimentos || [];
 
+    const combustiveisFiltrados = baseAbastecimentos.filter(ab => {
+        if (!ab.produto) return false;
+        const nomeUpper = ab.produto.toUpperCase();
+        const isEtanol = nomeUpper.includes('ETANOL');
+        const isLoja = palavrasChaveLoja.some(p => nomeUpper.includes(p));
+        return !isEtanol && !isLoja;
+    });
 
-      const vendasDeEtanol = abastecimentos.filter(ab => 
-        ab.produto && ab.produto.toUpperCase().includes("ETANOL")
-      );
-      console.log(`Encontradas ${vendasDeEtanol.length} vendas que contêm "ETANOL":`, vendasDeEtanol);
+    const todosOsAbastecimentosBrutos = [
+        ...combustiveisFiltrados,
+        ...etanolCorrigido,
+        ...lojaCorrigida
+    ];
 
-      const etanolCancelado = vendasDeEtanol.filter(ab => 
-        ab.situacao === 'CANCELADO' || ab.situacao === 'C'
-      );
-      
-      if (etanolCancelado.length > 0) {
-        console.warn(`‼️ Encontradas ${etanolCancelado.length} VENDA(S) DE ETANOL CANCELADA(S):`, etanolCancelado);
-        
-        const vendaSuspeita = etanolCancelado.find(ab => Math.abs(ab.valor - 43.81) < 0.01);
-        if (vendaSuspeita) {
-          console.error("🔥🔥🔥 ALVO ENCONTRADO! A venda de R$ 43,81 (ou valor próximo) está com status cancelado:", vendaSuspeita);
-        }
+    const todosOsAbastecimentos = todosOsAbastecimentosBrutos.map(ab => ({
+      ...ab,
+      valor: Number(ab.valor) || 0,
+      litragem: Number(ab.litragem) || 0,
+    }));
 
-      } else {
-        console.log("✅ Nenhuma venda de Etanol com status 'CANCELADO' ou 'C' foi encontrada.");
-      }
+    devLog("DADOS FINAIS COMBINADOS E CORRIGIDOS:", todosOsAbastecimentos);
 
-      console.groupEnd();
+    if (todosOsAbastecimentos.length === 0 && !isLoading) {
+        return { kpis: { abastecimentos: 0, litragem: 0, faturamento: 0, ticketMedioReal: 0 }, rankingData: [], performanceResumoData: [], chartData: [] };
     }
-    // FIM DO BLOCO DE LOG
 
-    if (!abastecimentos) return { kpis: null, rankingData: [], performanceResumoData: [], chartData: [] };
-
-    const faturamentoTotal = abastecimentos.reduce((acc, item) => acc + item.valor, 0);
-    const litragemTotal = abastecimentos.reduce((acc, item) => acc + item.litragem, 0);
-    const totalAbastecimentos = abastecimentos.length;
+    const faturamentoTotal = todosOsAbastecimentos.reduce((acc, item) => acc + item.valor, 0);
+    const litragemTotal = todosOsAbastecimentos.reduce((acc, item) => acc + item.litragem, 0);
+    const totalAbastecimentos = todosOsAbastecimentos.length;
     const ticketMedioReal = totalAbastecimentos > 0 ? faturamentoTotal / totalAbastecimentos : 0;
-    const faturamentoPorCategoria = abastecimentos.reduce((acc, item) => {
+    
+    const faturamentoPorCategoria = todosOsAbastecimentos.reduce((acc, item) => {
       const categoria = mapearProdutoParaCategoria(item.produto || 'OUTROS');
       if (!acc[categoria]) acc[categoria] = 0;
       acc[categoria] += item.valor;
       return acc;
     }, {} as Record<string, number>);
 
-    // ... (resto do seu código 'useMemo' continua exatamente igual)
     const end = new Date(endDate);
     const diasCorridos = end.getDate();
     const diasNoMes = new Date(end.getFullYear(), end.getMonth() + 1, 0).getDate();
+    
     let performanceResumoData = metasPosto.map(meta => {
-        const realizado = faturamentoPorCategoria[meta.periodo] || 0;
-        const tendencia = (new Date(startDate).getMonth() === today.getMonth())
-          ? (realizado / diasCorridos) * diasNoMes
-          : realizado;
-        const desempenho = meta.meta > 0 ? (realizado / meta.meta - 1) * 100 : 0;
-        const faltante = Math.max(0, meta.meta - realizado);
-        return { categoria: meta.periodo, metaMensal: meta.meta, realizado, tendencia, desempenho, faltante };
+      const realizado = faturamentoPorCategoria[meta.periodo] || 0;
+      const tendencia = (new Date(startDate).getMonth() === today.getMonth()) ? (realizado / diasCorridos) * diasNoMes : realizado;
+      const desempenho = meta.meta > 0 ? (realizado / meta.meta - 1) * 100 : 0;
+      const faltante = Math.max(0, meta.meta - realizado);
+      return { categoria: meta.periodo, metaMensal: meta.meta, realizado, tendencia, desempenho, faltante };
     });
+
     Object.entries(faturamentoPorCategoria).forEach(([categoria, realizado]) => {
-        if (!performanceResumoData.some(p => p.categoria === categoria)) {
-            performanceResumoData.push({
-                categoria,
-                metaMensal: 0,
-                realizado,
-                tendencia: (new Date(startDate).getMonth() === today.getMonth())
-                  ? (realizado / diasCorridos) * diasNoMes
-                  : realizado,
-                desempenho: 0,
-                faltante: 0
-            });
-        }
+      if (!performanceResumoData.some(p => p.categoria === categoria)) {
+          performanceResumoData.push({ categoria, metaMensal: 0, realizado, tendencia: (new Date(startDate).getMonth() === today.getMonth()) ? (realizado / diasCorridos) * diasNoMes : realizado, desempenho: 0, faltante: 0 });
+      }
     });
 
     performanceResumoData = performanceResumoData.filter(item => item.metaMensal > 0 || item.realizado > 0);
 
-    const salesByCollaborator = abastecimentos.reduce((acc, item) => {
-        const name = item.nomeFuncionario || "Não identificado";
-        if (!acc[name]) acc[name] = { faturamento: 0, litragem: 0 };
-        acc[name].faturamento += item.valor;
-        acc[name].litragem += item.litragem;
-        return acc;
+    const salesByCollaborator = todosOsAbastecimentos.reduce((acc, item) => {
+      const name = item.nomeFuncionario || "Não identificado";
+      if (!acc[name]) acc[name] = { faturamento: 0, litragem: 0 };
+      acc[name].faturamento += item.valor;
+      acc[name].litragem += item.litragem;
+      return acc;
     }, {} as Record<string, { faturamento: number, litragem: number }>);
 
     const rankingData = Object.entries(salesByCollaborator)
       .sort(([, a], [, b]) => b.faturamento - a.faturamento)
-      .map(([name, data], index) => ({
-        position: index + 1, name: name.toUpperCase(),
-        value: formatNumber(data.faturamento, { style: 'currency' }),
-        subValue: `${formatNumber(data.litragem, { maximumFractionDigits: 2 })} L`,
-        growth: 0
-      }));
+      .map(([name, data], index) => ({ position: index + 1, name: name.toUpperCase(), value: formatNumber(data.faturamento, { style: 'currency' }), subValue: `${formatNumber(data.litragem, { maximumFractionDigits: 2 })} L`, growth: 0 }));
       
     const hourlyData = Array.from({ length: 24 }, (_, i) => ({ name: `${i.toString().padStart(2, '0')}:00`, litros: 0, valor: 0 }));
-    abastecimentos.forEach(item => {
-      const hour = new Date(item.dhRegistro).getHours();
-      if (hourlyData[hour]) {
-        hourlyData[hour].litros += item.litragem;
-        hourlyData[hour].valor += item.valor;
+    todosOsAbastecimentos.forEach(item => {
+      if (item.dhRegistro) {
+        const hour = new Date(item.dhRegistro).getHours();
+        if (hourlyData[hour]) {
+          hourlyData[hour].litros += item.litragem;
+          hourlyData[hour].valor += item.valor;
+        }
       }
     });
 
-    return {
-      kpis: { abastecimentos: totalAbastecimentos, litragem: litragemTotal, faturamento: faturamentoTotal, ticketMedioReal },
-      rankingData,
-      performanceResumoData,
-      chartData: hourlyData.filter(h => h.litros > 0 || h.valor > 0),
-    };
-  }, [apiData, startDate, endDate, metasPosto, today]);
-  
-  const csvData = useMemo(() => {
-      if (!apiData || !apiData.abastecimentos) return [];
-      const headers = ["Data", "Hora", "Produto", "Litragem", "Valor", "Funcionário", "Status"];
-      const dataRows = apiData.abastecimentos.map(ab => [
-        new Date(ab.dhRegistro).toLocaleDateString('pt-BR'),
-        new Date(ab.dhRegistro).toLocaleTimeString('pt-BR'),
-        ab.produto, ab.litragem, ab.valor, ab.nomeFuncionario, ab.situacao
-      ]);
-      return [headers, ...dataRows];
-  }, [apiData]);
+    return { kpis: { abastecimentos: totalAbastecimentos, litragem: litragemTotal, faturamento: faturamentoTotal, ticketMedioReal }, rankingData, performanceResumoData, chartData: hourlyData.filter(h => h.litros > 0 || h.valor > 0) };
+  }, [baseData, etanolData, lojaData, startDate, endDate, metasPosto, today]);
 
+  const csvData = useMemo(() => {
+    const baseAbastecimentos = baseData?.abastecimentos || [];
+    const etanolCorrigido = etanolData?.abastecimentos || [];
+    const lojaCorrigida = lojaData?.abastecimentos || [];
+
+    const combustiveisFiltrados = baseAbastecimentos.filter(ab => {
+        if (!ab.produto) return false;
+        const nomeUpper = ab.produto.toUpperCase();
+        const isEtanol = nomeUpper.includes('ETANOL');
+        const isLoja = palavrasChaveLoja.some(p => nomeUpper.includes(p));
+        return !isEtanol && !isLoja;
+    });
+
+    const todosOsAbastecimentos = [...combustiveisFiltrados, ...etanolCorrigido, ...lojaCorrigida];
+    if (todosOsAbastecimentos.length === 0) return [];
+  
+    const headers = ["Data", "Hora", "Produto", "Litragem", "Valor", "Funcionário", "Status"];
+    const dataRows = todosOsAbastecimentos.map(ab => [
+      ab.dhRegistro ? new Date(ab.dhRegistro).toLocaleDateString('pt-BR') : 'N/A',
+      ab.dhRegistro ? new Date(ab.dhRegistro).toLocaleTimeString('pt-BR') : 'N/A',
+      ab.produto,
+      ab.litragem,
+      ab.valor,
+      ab.nomeFuncionario || "Não Identificado",
+      ab.situacao
+    ]);
+    return [headers, ...dataRows];
+  }, [baseData, etanolData, lojaData]);
+  
   const handleAddMeta = () => { setEditingMeta(null); setIsEditFormOpen(true); };
   const handleEditMeta = (item: PerformanceData) => {
     const existingMeta = metasPosto.find(m => m.periodo === item.categoria) 
@@ -230,7 +248,7 @@ export function PostoTab({ startDate, endDate }: DateProps) {
   };
   
   if (isLoading) return <div className="p-8 text-xl text-white">Carregando dados do posto...</div>;
-  if (isError) return <div className="p-8 text-xl text-red-500">Erro: {(error as Error).message}</div>;
+  if (isError) return <div className="p-8 text-xl text-red-500">Erro: {(error as Error)?.message || 'Ocorreu um erro desconhecido.'}</div>;
 
   return (
     <div className="p-8 space-y-6">
