@@ -175,7 +175,7 @@ export function PostoTab({ startDate, endDate }: DateProps) {
       }
     });
 
-    performanceResumoData = performanceResumoData.filter(item => item.metaMensal > 0 || item.realizado > 0);
+    performanceResumoData = performanceResumoData.filter(item => item.realizado > 0);
 
     const salesByCollaborator = todosOsAbastecimentos.reduce((acc, item) => {
       const name = item.nomeFuncionario || "Não identificado";
