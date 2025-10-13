@@ -21,8 +21,17 @@ interface Abastecimento {
   litragem: number | string; 
 }
 interface ApiResponse { abastecimentos: Abastecimento[]; }
+
+interface RankingItemApi {
+  Vendedor: string;
+  Abastecimentos: number;
+  Litragem: number;
+  Valor: number;
+}
+
 interface Meta { periodo: string; meta: number; realizado: number; percentual: number; }
 interface DateProps { startDate: string; endDate: string; }
+
 
 async function fetchBaseAbastecimentos(startDate: string, endDate: string): Promise<ApiResponse> {
   const token = localStorage.getItem("token");
@@ -54,7 +63,18 @@ async function fetchLojaVendas(startDate: string, endDate: string): Promise<ApiR
   return response.json();
 }
 
+async function fetchRankingColaboradores(startDate: string, endDate: string): Promise<RankingItemApi[]> {
+  const token = localStorage.getItem("token");
+  if (!token) throw new Error("Token não encontrado.");
+  const params = new URLSearchParams({ data_inicio: startDate, data_fim: endDate });
+  const url = `${import.meta.env.VITE_API_BASE_URL}/ranking/colaboradores?${params.toString()}`;
+  const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+  if (!response.ok) throw new Error('Falha ao buscar o ranking de colaboradores.');
+  return response.json();
+}
+
 const palavrasChaveLoja = ["ADITIVO", "ARLA", "MASTER", "FLUIDO", "HAVOLINE", "IPIRANGA", "PALHETA", "LUBRIFICANTE"];
+const palavrasChaveDiversos = ["PALHETA"];
 
 const mapearProdutoParaCategoria = (nomeProduto: string): string => {
     if (!nomeProduto) return "OUTROS";
@@ -63,8 +83,11 @@ const mapearProdutoParaCategoria = (nomeProduto: string): string => {
     if (nomeUpper.includes("ETANOL")) return "ETANOL COMUM";
     if (nomeUpper.includes("GASOLINA DT CLEAN")) return "GASOLINA DT CLEAN";
     if (nomeUpper.includes("GASOLINA")) return "GASOLINA COMUM";
-    if (palavrasChaveLoja.some(palavra => nomeUpper.includes(palavra))) {
+    if (palavrasChaveLoja.some(palavra => nomeUpper.includes(palavra) && !palavrasChaveDiversos.some(p => nomeUpper.includes(p)))) {
         return "LUBRIFICANTES E ADITIVOS";
+    }
+    if (palavrasChaveDiversos.some(palavra => nomeUpper.includes(palavra))) {
+        return "DIVERSOS";
     }
     return "OUTROS";
 };
@@ -92,27 +115,27 @@ export function PostoTab({ startDate, endDate }: DateProps) {
     localStorage.setItem('postoMetas', JSON.stringify(metasPosto));
   }, [metasPosto]);
 
-  const { data: baseData, isLoading: isLoadingBase, isError: isErrorBase, error: errorBase } = useQuery({
+  const { data: baseData, isLoading: isLoadingBase } = useQuery({
     queryKey: ['baseAbastecimentos', startDate, endDate],
     queryFn: () => fetchBaseAbastecimentos(startDate, endDate),
-    refetchInterval: 60000,
   });
   
-  const { data: etanolData, isLoading: isLoadingEtanol, isError: isErrorEtanol, error: errorEtanol } = useQuery({
+  const { data: etanolData, isLoading: isLoadingEtanol } = useQuery({
     queryKey: ['etanolCorrigido', startDate, endDate],
     queryFn: () => fetchEtanolCorrigido(startDate, endDate),
-    refetchInterval: 60000,
   });
 
-  const { data: lojaData, isLoading: isLoadingLoja, isError: isErrorLoja, error: errorLoja } = useQuery({
+  const { data: lojaData, isLoading: isLoadingLoja } = useQuery({
     queryKey: ['lojaVendas', startDate, endDate],
     queryFn: () => fetchLojaVendas(startDate, endDate),
-    refetchInterval: 60000,
   });
 
-  const isLoading = isLoadingBase || isLoadingEtanol || isLoadingLoja;
-  const isError = isErrorBase || isErrorEtanol || isErrorLoja;
-  const error = errorBase || errorEtanol || errorLoja;
+  const { data: rankingApiData, isLoading: isLoadingRanking, isError, error } = useQuery({
+    queryKey: ['rankingColaboradores', startDate, endDate],
+    queryFn: () => fetchRankingColaboradores(startDate, endDate),
+  });
+
+  const isLoading = isLoadingBase || isLoadingEtanol || isLoadingLoja || isLoadingRanking;
 
   const processedData = useMemo(() => {
     const baseAbastecimentos = baseData?.abastecimentos || [];
@@ -123,7 +146,7 @@ export function PostoTab({ startDate, endDate }: DateProps) {
         if (!ab.produto) return false;
         const nomeUpper = ab.produto.toUpperCase();
         const isEtanol = nomeUpper.includes('ETANOL');
-        const isLoja = palavrasChaveLoja.some(p => nomeUpper.includes(p));
+        const isLoja = [...palavrasChaveLoja, ...palavrasChaveDiversos].some(p => nomeUpper.includes(p));
         return !isEtanol && !isLoja;
     });
 
@@ -139,7 +162,7 @@ export function PostoTab({ startDate, endDate }: DateProps) {
       litragem: Number(ab.litragem) || 0,
     }));
 
-    devLog("DADOS FINAIS COMBINADOS E CORRIGIDOS:", todosOsAbastecimentos);
+    devLog("DADOS PARA KPIs E RESUMO:", todosOsAbastecimentos);
 
     if (todosOsAbastecimentos.length === 0 && !isLoading) {
         return { kpis: { abastecimentos: 0, litragem: 0, faturamento: 0, ticketMedioReal: 0 }, rankingData: [], performanceResumoData: [], chartData: [] };
@@ -175,20 +198,18 @@ export function PostoTab({ startDate, endDate }: DateProps) {
       }
     });
 
-    performanceResumoData = performanceResumoData.filter(item => item.realizado > 0);
+    performanceResumoData = performanceResumoData.filter(item => item.metaMensal > 0 || item.realizado > 0);
+    
+    const rankingData = (rankingApiData || []).map((item, index) => ({
+      position: index + 1,
+      name: item.Vendedor.toUpperCase(),
+      value: formatNumber(item.Valor, { style: 'currency' }),
+      subValue: `${formatNumber(item.Litragem, { maximumFractionDigits: 2 })} L`,
+      growth: 0
+    }));
 
-    const salesByCollaborator = todosOsAbastecimentos.reduce((acc, item) => {
-      const name = item.nomeFuncionario || "Não identificado";
-      if (!acc[name]) acc[name] = { faturamento: 0, litragem: 0 };
-      acc[name].faturamento += item.valor;
-      acc[name].litragem += item.litragem;
-      return acc;
-    }, {} as Record<string, { faturamento: number, litragem: number }>);
+    devLog("DADOS DO RANKING (DA API):", rankingData);
 
-    const rankingData = Object.entries(salesByCollaborator)
-      .sort(([, a], [, b]) => b.faturamento - a.faturamento)
-      .map(([name, data], index) => ({ position: index + 1, name: name.toUpperCase(), value: formatNumber(data.faturamento, { style: 'currency' }), subValue: `${formatNumber(data.litragem, { maximumFractionDigits: 2 })} L`, growth: 0 }));
-      
     const hourlyData = Array.from({ length: 24 }, (_, i) => ({ name: `${i.toString().padStart(2, '0')}:00`, litros: 0, valor: 0 }));
     todosOsAbastecimentos.forEach(item => {
       if (item.dhRegistro) {
@@ -201,36 +222,11 @@ export function PostoTab({ startDate, endDate }: DateProps) {
     });
 
     return { kpis: { abastecimentos: totalAbastecimentos, litragem: litragemTotal, faturamento: faturamentoTotal, ticketMedioReal }, rankingData, performanceResumoData, chartData: hourlyData.filter(h => h.litros > 0 || h.valor > 0) };
-  }, [baseData, etanolData, lojaData, startDate, endDate, metasPosto, today]);
+  }, [baseData, etanolData, lojaData, rankingApiData, startDate, endDate, metasPosto, today]);
 
   const csvData = useMemo(() => {
-    const baseAbastecimentos = baseData?.abastecimentos || [];
-    const etanolCorrigido = etanolData?.abastecimentos || [];
-    const lojaCorrigida = lojaData?.abastecimentos || [];
-
-    const combustiveisFiltrados = baseAbastecimentos.filter(ab => {
-        if (!ab.produto) return false;
-        const nomeUpper = ab.produto.toUpperCase();
-        const isEtanol = nomeUpper.includes('ETANOL');
-        const isLoja = palavrasChaveLoja.some(p => nomeUpper.includes(p));
-        return !isEtanol && !isLoja;
-    });
-
-    const todosOsAbastecimentos = [...combustiveisFiltrados, ...etanolCorrigido, ...lojaCorrigida];
-    if (todosOsAbastecimentos.length === 0) return [];
-  
-    const headers = ["Data", "Hora", "Produto", "Litragem", "Valor", "Funcionário", "Status"];
-    const dataRows = todosOsAbastecimentos.map(ab => [
-      ab.dhRegistro ? new Date(ab.dhRegistro).toLocaleDateString('pt-BR') : 'N/A',
-      ab.dhRegistro ? new Date(ab.dhRegistro).toLocaleTimeString('pt-BR') : 'N/A',
-      ab.produto,
-      ab.litragem,
-      ab.valor,
-      ab.nomeFuncionario || "Não Identificado",
-      ab.situacao
-    ]);
-    return [headers, ...dataRows];
-  }, [baseData, etanolData, lojaData]);
+    return [];
+  }, [processedData]);
   
   const handleAddMeta = () => { setEditingMeta(null); setIsEditFormOpen(true); };
   const handleEditMeta = (item: PerformanceData) => {
