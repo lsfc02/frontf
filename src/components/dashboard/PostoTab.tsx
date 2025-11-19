@@ -287,12 +287,24 @@ export function PostoTab({ startDate, endDate }: DateProps) {
     }));
     
     vendasProcessadas.forEach(item => {
-      if (item.dhRegistro || item.data) {
-        const dateStr = item.dhRegistro || item.data;
-        const hour = new Date(dateStr).getHours();
-        if (hourlyData[hour]) {
+      // ✅ PRIORIZA o campo 'hora' que já vem da API (ex: "21:30:00")
+      if (item.hora) {
+        const hour = parseInt(item.hora.split(':')[0], 10);  // Extrai apenas a hora
+        if (!isNaN(hour) && hour >= 0 && hour < 24 && hourlyData[hour]) {
           hourlyData[hour].litros += item.litragem;
           hourlyData[hour].valor += item.valor;
+        }
+      }
+      // ✅ Fallback: se não tiver 'hora', tenta dhRegistro
+      else if (item.dhRegistro) {
+        try {
+          const hour = new Date(item.dhRegistro).getHours();
+          if (hour >= 0 && hour < 24 && hourlyData[hour]) {
+            hourlyData[hour].litros += item.litragem;
+            hourlyData[hour].valor += item.valor;
+          }
+        } catch (e) {
+          console.warn('Erro ao parsear hora de dhRegistro:', e);
         }
       }
     });
