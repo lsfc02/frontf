@@ -56,7 +56,6 @@ const mapearDepartamento = (dept: string): string => {
   if (!dept) return "OUTROS";
   const deptUpper = dept.trim().toUpperCase();
   
-  // Mapeia exatamente como o script Python faz
   if (deptUpper.includes("COMBUSTI") || deptUpper === "COMBUSTÍVEIS") {
     return "COMBUSTÍVEIS";
   }
@@ -73,7 +72,7 @@ const mapearDepartamento = (dept: string): string => {
   return "OUTROS";
 };
 
-// ✅ CATEGORIZAÇÃO POR PRODUTO - IGUAL AO SCRIPT PYTHON
+// ✅ CATEGORIZAÇÃO POR PRODUTO - CORRIGIDO PARA JUNTAR LUBRIFICANTES E ADITIVOS
 const categorizarProduto = (produto: string, departamento: string): string => {
   if (!produto) return "OUTROS";
   
@@ -87,6 +86,11 @@ const categorizarProduto = (produto: string, departamento: string): string => {
     if (prodUpper.includes("DIESEL")) return "DIESEL S-10";
     if (prodUpper.includes("DT CLEAN") || prodUpper.includes("DTCLEAN")) return "GASOLINA DT CLEAN";
     if (prodUpper.includes("GASOLINA")) return "GASOLINA COMUM";
+  }
+  
+  // ✅ JUNTA LUBRIFICANTES E ADITIVOS EM UMA SÓ CATEGORIA
+  if (dept === "LUBRIFICANTES" || dept === "ADITIVOS") {
+    return "LUBRIFICANTES E ADITIVOS";
   }
   
   // Para outros departamentos, usa o departamento como categoria
@@ -147,8 +151,7 @@ export function PostoTab({ startDate, endDate }: DateProps) {
       { periodo: "ETANOL COMUM", meta: 78650, realizado: 0, percentual: 0 },
       { periodo: "GASOLINA COMUM", meta: 46980, realizado: 0, percentual: 0 },
       { periodo: "GASOLINA DT CLEAN", meta: 60000, realizado: 0, percentual: 0 },
-      { periodo: "LUBRIFICANTES", meta: 3828, realizado: 0, percentual: 0 },
-      { periodo: "ADITIVOS", meta: 800, realizado: 0, percentual: 0 },
+      { periodo: "LUBRIFICANTES E ADITIVOS", meta: 3828, realizado: 0, percentual: 0 },
       { periodo: "DIVERSOS", meta: 130, realizado: 0, percentual: 0 },
     ];
   });
@@ -177,29 +180,12 @@ export function PostoTab({ startDate, endDate }: DateProps) {
   const processedData = useMemo(() => {
     const vendas = vendasData?.abastecimentos || [];
 
-    // ✅ Converte valores para número
     const vendasProcessadas = vendas.map(v => ({
       ...v,
       valor: Number(v.valor) || 0,
       litragem: Number(v.litragem) || 0,
       valorUnitario: Number(v.valorUnitario) || 0,
     }));
-
-    // 🔍 DEBUG - Mostra departamentos e produtos únicos
-    const deptUnicos = [...new Set(vendasProcessadas.map(v => v.departamento))];
-    console.log("🔍 DEPARTAMENTOS ÚNICOS:", deptUnicos);
-    
-    const produtosPorDept = vendasProcessadas.reduce((acc, v) => {
-      const dept = mapearDepartamento(v.departamento);
-      if (!acc[dept]) acc[dept] = new Set();
-      acc[dept].add(v.produto);
-      return acc;
-    }, {} as Record<string, Set<string>>);
-    
-    console.log("🔍 PRODUTOS POR DEPARTAMENTO:");
-    Object.entries(produtosPorDept).forEach(([dept, prods]) => {
-      console.log(`  ${dept}:`, Array.from(prods));
-    });
 
     devLog("DADOS DE VENDAS PROCESSADOS:", vendasProcessadas);
 
@@ -212,8 +198,7 @@ export function PostoTab({ startDate, endDate }: DateProps) {
       };
     }
 
-    // ✅ AGRUPAMENTO IGUAL AO SCRIPT PYTHON
-    // Agrupa por categoria (produto específico para combustíveis, departamento para outros)
+    // ✅ AGRUPAMENTO - Agora junta LUBRIFICANTES E ADITIVOS
     const faturamentoPorCategoria = vendasProcessadas.reduce((acc, item) => {
       const categoria = categorizarProduto(item.produto || '', item.departamento || '');
       if (!acc[categoria]) acc[categoria] = 0;
