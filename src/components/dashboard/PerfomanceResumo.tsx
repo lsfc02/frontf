@@ -7,11 +7,11 @@ export interface PerformanceData {
   categoria: string; 
   metaMensal: number;
   realizado: number;
+  litragem: number;  // ✅ Campo já existe
   tendencia: number;
   desempenho: number;
   faltante: number;
 }
-
 
 interface PerformanceResumoProps {
   titulo: string;
@@ -24,10 +24,11 @@ export function PerformanceResumo({ titulo, data, onAddMeta, onEditMeta }: Perfo
   const total = data.reduce((acc, item) => {
     acc.metaMensal += item.metaMensal;
     acc.realizado += item.realizado;
+    acc.litragem += item.litragem;  // ✅ Soma litragem
     acc.tendencia += item.tendencia;
     acc.faltante += item.faltante;
     return acc;
-  }, { categoria: "TOTAL", metaMensal: 0, realizado: 0, tendencia: 0, desempenho: 0, faltante: 0 });
+  }, { categoria: "TOTAL", metaMensal: 0, realizado: 0, litragem: 0, tendencia: 0, desempenho: 0, faltante: 0 });
   total.desempenho = total.metaMensal > 0 ? (total.realizado / total.metaMensal - 1) * 100 : 0;
 
   const renderDesempenho = (desempenho: number) => {
@@ -49,47 +50,56 @@ export function PerformanceResumo({ titulo, data, onAddMeta, onEditMeta }: Perfo
             <Plus className="w-4 h-4" /> Nova Meta
           </Button>
        </div>
-       <table className="w-full text-sm">
-          <thead className="text-xs text-text-secondary uppercase">
-            <tr>
-              <th className="px-2 py-3 text-left">Categoria</th>
-              <th className="px-2 py-3 text-right">Meta Mensal</th>
-              <th className="px-2 py-3 text-right">Realizado</th>
-              <th className="px-2 py-3 text-right">Tendência</th>
-              <th className="px-2 py-3 text-right">Desempenho</th>
-              <th className="px-2 py-3 text-right">Faltante</th>
-              <th className="px-2 py-3 text-center">Ações</th>
-            </tr>
-          </thead>
-          <tbody className="text-text-primary">
-            {data.map((item) => (
-              <tr key={item.categoria} className="border-b border-border">
-                <td className="px-2 py-3 font-medium">{item.categoria}</td>
-                <td className="px-2 py-3 text-right text-text-secondary">{formatNumber(item.metaMensal, {style: 'currency'})}</td>
-                <td className="px-2 py-3 text-right font-semibold">{formatNumber(item.realizado, {style: 'currency'})}</td>
-                <td className="px-2 py-3 text-right text-text-secondary">{formatNumber(item.tendencia, {style: 'currency'})}</td>
-                <td className="px-2 py-3 text-right">{renderDesempenho(item.desempenho)}</td>
-                <td className="px-2 py-3 text-right text-text-secondary">{formatNumber(item.faltante, {style: 'currency'})}</td>
-                <td className="px-2 py-3 text-center">
-                  <Button size="sm" variant="ghost" onClick={() => onEditMeta(item)} className="h-6 w-6 p-0 hover:bg-kpi-cyan/20">
-                    <Edit className="w-3 h-3" />
-                  </Button>
-                </td>
+       <div className="overflow-x-auto">
+         <table className="w-full text-sm">
+            <thead className="text-xs text-text-secondary uppercase">
+              <tr>
+                <th className="px-2 py-3 text-left">Categoria</th>
+                <th className="px-2 py-3 text-right">Meta Mensal</th>
+                <th className="px-2 py-3 text-right">Litragem</th>  {/* ✅ Nova coluna */}
+                <th className="px-2 py-3 text-right">Realizado</th>
+                <th className="px-2 py-3 text-right">Tendência</th>
+                <th className="px-2 py-3 text-right">Desempenho</th>
+                <th className="px-2 py-3 text-right">Faltante</th>
+                <th className="px-2 py-3 text-center">Ações</th>
               </tr>
-            ))}
-          </tbody>
-          <tfoot className="font-bold text-text-primary">
-             <tr>
-                <td className="px-2 py-3">{total.categoria}</td>
-                <td className="px-2 py-3 text-right">{formatNumber(total.metaMensal, {style: 'currency'})}</td>
-                <td className="px-2 py-3 text-right">{formatNumber(total.realizado, {style: 'currency'})}</td>
-                <td className="px-2 py-3 text-right">{formatNumber(total.tendencia, {style: 'currency'})}</td>
-                <td className="px-2 py-3 text-right">{renderDesempenho(total.desempenho)}</td>
-                <td className="px-2 py-3 text-right">{formatNumber(total.faltante, {style: 'currency'})}</td>
-                <td className="px-2 py-3"></td>
-             </tr>
-          </tfoot>
-       </table>
+            </thead>
+            <tbody className="text-text-primary">
+              {data.map((item) => (
+                <tr key={item.categoria} className="border-b border-border">
+                  <td className="px-2 py-3 font-medium">{item.categoria}</td>
+                  <td className="px-2 py-3 text-right text-text-secondary">{formatNumber(item.metaMensal, {style: 'currency'})}</td>
+                  <td className="px-2 py-3 text-right font-semibold text-kpi-purple">
+                    {formatNumber(item.litragem, {maximumFractionDigits: 2})} L
+                  </td>  {/* ✅ Mostra litragem */}
+                  <td className="px-2 py-3 text-right font-semibold">{formatNumber(item.realizado, {style: 'currency'})}</td>
+                  <td className="px-2 py-3 text-right text-text-secondary">{formatNumber(item.tendencia, {style: 'currency'})}</td>
+                  <td className="px-2 py-3 text-right">{renderDesempenho(item.desempenho)}</td>
+                  <td className="px-2 py-3 text-right text-text-secondary">{formatNumber(item.faltante, {style: 'currency'})}</td>
+                  <td className="px-2 py-3 text-center">
+                    <Button size="sm" variant="ghost" onClick={() => onEditMeta(item)} className="h-6 w-6 p-0 hover:bg-kpi-cyan/20">
+                      <Edit className="w-3 h-3" />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="font-bold text-text-primary">
+               <tr>
+                  <td className="px-2 py-3">{total.categoria}</td>
+                  <td className="px-2 py-3 text-right">{formatNumber(total.metaMensal, {style: 'currency'})}</td>
+                  <td className="px-2 py-3 text-right text-kpi-purple">
+                    {formatNumber(total.litragem, {maximumFractionDigits: 2})} L
+                  </td>  {/* ✅ Total de litragem */}
+                  <td className="px-2 py-3 text-right">{formatNumber(total.realizado, {style: 'currency'})}</td>
+                  <td className="px-2 py-3 text-right">{formatNumber(total.tendencia, {style: 'currency'})}</td>
+                  <td className="px-2 py-3 text-right">{renderDesempenho(total.desempenho)}</td>
+                  <td className="px-2 py-3 text-right">{formatNumber(total.faltante, {style: 'currency'})}</td>
+                  <td className="px-2 py-3"></td>
+               </tr>
+            </tfoot>
+         </table>
+       </div>
     </div>
   );
 }
