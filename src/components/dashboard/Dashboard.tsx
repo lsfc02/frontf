@@ -19,15 +19,10 @@ interface ConvenienciaApiResponse { resumoGeral: ResumoGeral; [key: string]: any
 
 async function fetchAbastecimentos(startDate: string, endDate: string): Promise<PostoApiResponse> {
   const token = localStorage.getItem("token");
+  if (!token) throw new Error("Token não encontrado.");
+  const params = new URLSearchParams({ ini: startDate, fim: endDate, top: '5000' });
   const apiUrl = import.meta.env.VITE_API_BASE_URL;
-
-  const params = new URLSearchParams({
-    ini: startDate,
-    fim: endDate
-  });
-
-  const url = `${apiUrl}/fueltec/vendas?${params.toString()}`;
-
+  const url = `${apiUrl}/fueltec/abastecimentos?${params.toString()}`;
 
   const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
   if (!response.ok) throw new Error('Falha ao buscar dados do posto.');
