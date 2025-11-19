@@ -280,35 +280,124 @@ export function PostoTab({ startDate, endDate }: DateProps) {
     }));
 
     // Dados para gráfico de tendência por hora
+   // ═══════════════════════════════════════════════════════════════════
+// 🐛 VERSÃO DEBUG - Substitua o trecho do gráfico por este código
+// ═══════════════════════════════════════════════════════════════════
+
+    // Dados para gráfico de tendência por hora
     const hourlyData = Array.from({ length: 24 }, (_, i) => ({ 
       name: `${i.toString().padStart(2, '0')}:00`, 
       litros: 0, 
       valor: 0 
     }));
     
-    vendasProcessadas.forEach(item => {
-      // ✅ PRIORIZA o campo 'hora' que já vem da API (ex: "21:30:00")
+    // ✅ DEBUG: Variáveis para rastreamento
+    console.log("═══════════════════════════════════════════════════════");
+    console.log("🔍 DEBUG: ANÁLISE DE HORAS DAS VENDAS");
+    console.log("═══════════════════════════════════════════════════════");
+    console.log(`📊 Total de vendas: ${vendasProcessadas.length}`);
+    
+    // Mostra amostra das primeiras 10 vendas
+    console.log("\n📋 AMOSTRA (primeiras 10 vendas):");
+    vendasProcessadas.slice(0, 10).forEach((v, i) => {
+      console.log(`  ${i+1}. data="${v.data}" hora="${v.hora}" dhRegistro="${v.dhRegistro}" valor=${v.valor}`);
+    });
+    
+    let vendasComHora = 0;
+    let vendasSemHora = 0;
+    let vendasComDhRegistro = 0;
+    const horasUnicas = new Set<number>();
+    const horasStrUnicas = new Set<string>();
+    
+    vendasProcessadas.forEach((item, index) => {
+      // ✅ PRIORIZA o campo 'hora' que já vem da API
       if (item.hora) {
-        const hour = parseInt(item.hora.split(':')[0], 10);  // Extrai apenas a hora
+        vendasComHora++;
+        horasStrUnicas.add(item.hora);  // Armazena a string completa (ex: "21:00:00")
+        
+        const hour = parseInt(item.hora.split(':')[0], 10);
+        
+        // DEBUG: Mostra as primeiras 5 conversões
+        if (index < 5) {
+          console.log(`🔄 Venda ${index+1}: hora="${item.hora}" → parseInt="${hour}"`);
+        }
+        
         if (!isNaN(hour) && hour >= 0 && hour < 24 && hourlyData[hour]) {
           hourlyData[hour].litros += item.litragem;
           hourlyData[hour].valor += item.valor;
+          horasUnicas.add(hour);
+        } else {
+          console.warn(`⚠️ Hora inválida detectada: "${item.hora}" → ${hour}`);
         }
       }
       // ✅ Fallback: se não tiver 'hora', tenta dhRegistro
       else if (item.dhRegistro) {
+        vendasSemHora++;
+        vendasComDhRegistro++;
+        
         try {
           const hour = new Date(item.dhRegistro).getHours();
+          
+          // DEBUG: Mostra as primeiras 5 conversões de fallback
+          if (vendasSemHora <= 5) {
+            console.log(`🔄 Fallback ${vendasSemHora}: dhRegistro="${item.dhRegistro}" → getHours()=${hour}`);
+          }
+          
           if (hour >= 0 && hour < 24 && hourlyData[hour]) {
             hourlyData[hour].litros += item.litragem;
             hourlyData[hour].valor += item.valor;
+            horasUnicas.add(hour);
           }
         } catch (e) {
-          console.warn('Erro ao parsear hora de dhRegistro:', e);
+          console.warn('⚠️ Erro ao parsear dhRegistro:', e);
         }
+      } else {
+        console.warn(`⚠️ Venda ${index+1} sem hora E sem dhRegistro!`);
       }
     });
-
+    
+    // ✅ DEBUG: Resumo do processamento
+    console.log("\n═══════════════════════════════════════════════════════");
+    console.log("📊 RESUMO DO PROCESSAMENTO:");
+    console.log(`   - Vendas com campo 'hora': ${vendasComHora}`);
+    console.log(`   - Vendas sem campo 'hora' (usando dhRegistro): ${vendasSemHora}`);
+    console.log(`   - Horas únicas (índice 0-23): ${horasUnicas.size} diferentes`);
+    console.log(`   - Array de horas: [${Array.from(horasUnicas).sort((a,b) => a-b).join(', ')}]`);
+    
+    // Mostra strings de hora únicas
+    if (horasStrUnicas.size <= 20) {
+      console.log(`   - Strings de hora únicas (${horasStrUnicas.size}): ${Array.from(horasStrUnicas).sort().join(', ')}`);
+    } else {
+      console.log(`   - Strings de hora únicas: ${horasStrUnicas.size} diferentes (muitas para mostrar)`);
+    }
+    console.log("═══════════════════════════════════════════════════════");
+    
+    // ✅ DEBUG: Mostra dados finais por hora
+    const horasComDados = hourlyData.filter(h => h.litros > 0 || h.valor > 0);
+    console.log("\n💰 HORAS COM VENDAS:");
+    horasComDados.forEach(h => {
+      console.log(`   ${h.name}: ${h.litros.toFixed(2)} L, R$ ${h.valor.toFixed(2)}`);
+    });
+    
+    // ✅ DEBUG: Análise final
+    console.log("\n═══════════════════════════════════════════════════════");
+    if (horasComDados.length === 1) {
+      console.error("❌ PROBLEMA DETECTADO: Só 1 hora tem dados!");
+      console.error("   Isso significa que TODAS as vendas têm a mesma hora.");
+      console.error("\n🔍 CAUSAS POSSÍVEIS:");
+      console.error("   1. API está retornando sempre a mesma hora (ex: '21:00:00')");
+      console.error("   2. Campo 'hora' vazio e dhRegistro com timezone errado");
+      console.error("\n💡 SOLUÇÃO:");
+      console.error("   - Verifique a API: GET /fueltec/vendas");
+      console.error("   - Veja se o campo 'hora' varia ao longo do dia");
+      console.error("   - Ou se todas as vendas têm hora='21:00:00'");
+    } else if (horasComDados.length > 1) {
+      console.log(`✅ SUCESSO: ${horasComDados.length} horas diferentes têm dados!`);
+      console.log("   O gráfico deve mostrar várias horas.");
+    } else {
+      console.error("❌ PROBLEMA: Nenhuma hora tem dados!");
+    }
+    console.log("═══════════════════════════════════════════════════════\n");
     return { 
       kpis: { 
         abastecimentos: totalVendas, 
