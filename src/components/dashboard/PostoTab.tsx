@@ -306,7 +306,7 @@ export function PostoTab({ startDate, endDate }: DateProps) {
       }, 
       rankingData, 
       performanceResumoData, 
-      chartData: hourlyData.filter(h => h.litros > 0 || h.valor > 0) 
+      chartData: hourlyData  // ✅ Mostra todas as 24 horas, não filtra
     };
   }, [vendasData, rankingApiData, startDate, endDate, metasPosto, today, isLoading]);
 
